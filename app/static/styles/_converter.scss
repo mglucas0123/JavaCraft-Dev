@@ -1,0 +1,389 @@
+
+// Variáveis do tema
+:root {
+    --primary-color: #6366f1;
+    --primary-hover: #4f46e5;
+    --bg-dark: #0f172a;
+    --bg-card: #1e293b;
+    --bg-secondary: #334155;
+    --text-primary: #f8fafc;
+    --text-secondary: #cbd5e1;
+    --border-color: #475569;
+    --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --gradient-card: linear-gradient(145deg, #1e293b 0%, #334155 100%);
+}
+
+// Corpo e fundo com estrelas
+body {
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+    
+    &::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(2px 2px at 20px 30px, #eee, transparent),
+                    radial-gradient(2px 2px at 40px 70px, rgba(255,255,255,0.8), transparent),
+                    radial-gradient(1px 1px at 90px 40px, rgba(255,255,255,0.6), transparent),
+                    radial-gradient(1px 1px at 130px 80px, rgba(255,255,255,0.4), transparent),
+                    radial-gradient(2px 2px at 160px 30px, rgba(255,255,255,0.6), transparent);
+        background-repeat: repeat;
+        background-size: 200px 100px;
+        animation: sparkle 20s linear infinite;
+        pointer-events: none;
+        z-index: 1;
+    }
+}
+
+@keyframes sparkle {
+    0% { transform: translateY(0) rotate(0deg); }
+    100% { transform: translateY(-100px) rotate(360deg); }
+}
+
+@keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+// Container principal
+.container-fluid {
+    position: relative;
+    z-index: 2;
+}
+
+// Header
+header {
+    background: var(--gradient-card);
+    padding: 0rem 2rem;
+    border-radius: 1.5rem;
+    margin-bottom: 3rem;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-lg);
+    position: relative;
+    overflow: hidden;
+    
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+        z-index: 1;
+    }
+    
+    h1 {
+        background: var(--gradient-primary);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-weight: 800;
+        text-shadow: none;
+        position: relative;
+        z-index: 2;
+        letter-spacing: -0.02em;
+        
+        i {
+            color: var(--primary-color);
+            filter: drop-shadow(0 0 10px rgba(99, 102, 241, 0.5));
+        }
+    }
+    
+    .lead {
+        position: relative;
+        z-index: 2;
+        color: var(--text-secondary);
+        font-weight: 400;
+        font-size: 1.1rem;
+    }
+}
+
+// Cards
+.card {
+    background: var(--gradient-card);
+    border-radius: 1rem;
+    box-shadow: var(--shadow-lg);
+    transition: all 0.3s ease;
+    position: relative;
+    padding: 2px;
+    
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(45deg, #6366f1, #8b5cf6, #ec4899, #f59e0b, #10b981, #06b6d4);
+        background-size: 300% 300%;
+        border-radius: 1rem;
+        z-index: -1;
+        animation: gradientShift 3s ease-in-out infinite;
+    }
+    
+    &::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        right: 2px;
+        bottom: 2px;
+        background: var(--gradient-card);
+        border-radius: calc(1rem - 2px);
+        z-index: -1;
+    }
+    
+    &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 32px 64px -12px rgba(0, 0, 0, 0.35);
+        
+        &::before {
+            animation-duration: 1.5s;
+        }
+    }
+    
+    .card-title {
+        color: var(--text-primary);
+        font-weight: 600;
+        background: linear-gradient(45deg, #6366f1, #8b5cf6, #ec4899, #f59e0b, #10b981, #06b6d4);
+        background-size: 300% 300%;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        animation: gradientShift 3s ease-in-out infinite;
+    }
+}
+
+// Inputs e textareas
+.form-control {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: 0.75rem;
+    
+    &:focus {
+        background: var(--bg-secondary);
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.25);
+        color: var(--text-primary);
+    }
+    
+    &::placeholder {
+        color: var(--text-secondary);
+    }
+}
+
+// Botão principal
+.btn-primary {
+    background: var(--gradient-primary);
+    border: none;
+    border-radius: 0.75rem;
+    padding: 1rem 2rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+        transition: left 0.5s;
+    }
+    
+    &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 20px 40px rgba(99, 102, 241, 0.4);
+        
+        &::before {
+            left: 100%;
+        }
+    }
+    
+    &:disabled {
+        opacity: 0.7;
+        transform: none;
+        box-shadow: none;
+    }
+}
+
+// Botões secundários
+.btn-outline-secondary {
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+    
+    &:hover {
+        background: var(--primary-color);
+        border-color: var(--primary-color);
+        color: white;
+    }
+}
+
+// Área de código
+.code-output {
+    background: var(--bg-secondary);
+    border-radius: 0.75rem;
+    border: 1px solid var(--border-color);
+    position: relative;
+    
+    .copy-button {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        z-index: 10;
+        background: rgba(99, 102, 241, 0.9);
+        border: none;
+        border-radius: 0.5rem;
+        color: white;
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+        transition: all 0.3s ease;
+        backdrop-filter: blur(10px);
+        
+        &:hover {
+            background: var(--primary-color);
+            transform: scale(1.05);
+        }
+        
+        &.copied {
+            background: #10b981;
+            
+            &::after {
+                content: 'Copiado!';
+            }
+            
+            i {
+                display: none;
+            }
+        }
+    }
+}
+
+// Área de output customizada
+#outputContainer {
+    position: relative;
+    
+    pre[class*="language-"] {
+        background: var(--bg-dark) !important;
+        color: var(--text-primary) !important;
+        border: 1px solid var(--border-color) !important;
+        border-radius: 0.75rem !important;
+        margin: 0;
+        
+        code {
+            color: inherit !important;
+        }
+    }
+    
+    .line-numbers .line-numbers-rows {
+        border-right-color: var(--border-color) !important;
+    }
+}
+
+// Alertas
+.alert-danger {
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    border: 1px solid #dc2626;
+    color: white;
+    border-radius: 0.75rem;
+}
+
+// Placeholder quando não há código
+.bg-body-secondary {
+    background: var(--bg-secondary) !important;
+    border: 2px dashed var(--border-color) !important;
+    
+    p {
+        color: var(--text-secondary);
+        margin: 0;
+    }
+}
+
+// Animações adicionais
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.card {
+    animation: fadeInUp 0.6s ease forwards;
+    
+    &:nth-child(2) {
+        animation-delay: 0.1s;
+    }
+}
+
+// Responsive
+@media (max-width: 768px) {
+    body::before {
+        background-size: 150px 75px;
+    }
+    
+    .container-fluid {
+        padding: 1rem;
+    }
+    
+    header {
+        margin-bottom: 1rem;
+        
+        h1 {
+            font-size: 1.5rem;
+        }
+    }
+    
+    .code-output .copy-button {
+        top: 0.5rem;
+        right: 0.5rem;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+    }
+}
+
+// Efeitos de hover para os ícones
+i {
+    transition: all 0.3s ease;
+}
+
+.btn:hover i {
+    transform: scale(1.1);
+}
+
+// Scrollbar customizada
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 4px;
+    
+    &:hover {
+        background: var(--primary-hover);
+    }
+}

@@ -9,42 +9,23 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css" rel="stylesheet" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}" />
 
     <style>
-        :root { transition: background-color 0.2s linear, color 0.2s linear; }
-        .card { transition: box-shadow 0.2s ease-in-out; }
-        .card:hover { box-shadow: var(--bs-box-shadow-lg) !important; }
         .code-input, .code-output { height: 500px; resize: vertical; }
-        pre[class*="language-"] {
-            color: var(--prism-color, #393A34);
-            background: var(--prism-background, #f8f9fa);
-            border: 1px solid var(--bs-border-color);
-            margin: 0;
-            border-radius: 0.5rem;
-            height: 100%;
-            overflow: auto;
-            transition: background-color 0.2s linear, border-color 0.2s linear;
-        }
-        [data-bs-theme="dark"] pre[class*="language-"] { --prism-color: #f8f8f2; --prism-background: #272822; }
-        .line-numbers .line-numbers-rows { border-right: 1px solid var(--bs-border-color) !important; transition: border-color 0.2s linear; }
-        .token.tab:not(:empty):before, .token.cr:before, .token.lf:before { color: var(--bs-tertiary-color); transition: color 0.2s linear; }
         .input-wrapper { position: relative; }
         .clear-button { position: absolute; top: 0.5rem; right: 0.5rem; z-index: 10; }
-        /* Garante que o pre preencha o container */
         .code-output { display: flex; flex-direction: column; }
         #outputContainer { flex-grow: 1; }
     </style>
 </head>
-<body class="bg-body-tertiary py-4">
+<body class="py-4">
     <div class="container-fluid" style="max-width: 1600px;">
-        <header class="d-flex justify-content-between align-items-center pb-3 mb-4 border-bottom">
-            <h1 class="h3 mb-0">
-                <i class="bi bi-file-earmark-code-fill me-2"></i>Conversor de Modelo Profissional
+        <header class="text-center pb-4 mb-4">
+            <h1 class="display-4 fw-bold mb-2">
+                <i class="bi bi-gear-wide-connected me-3"></i>ModelCon<span class="v-letter">v</span>erter Pro
             </h1>
-            <div class="form-check form-switch fs-5" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Alterar Tema">
-                <input class="form-check-input" type="checkbox" role="switch" id="darkModeSwitch">
-                <label class="form-check-label" for="darkModeSwitch"><i class="bi bi-moon-stars-fill"></i></label>
-            </div>
+            <p class="lead text-secondary mb-0">Converta seus modelos de Minecraft 1.7.10 para 1.21.1 com precisão profissional</p>
         </header>
 
         <form>
@@ -100,9 +81,11 @@
             const codeInput = document.getElementById('codeInput');
             const convertBtn = document.getElementById('convertBtn');
             const clearBtn = document.getElementById('clearBtn');
-            const darkModeSwitch = document.getElementById('darkModeSwitch');
+            
             const outputContainer = document.getElementById('outputContainer');
             const errorDisplay = document.getElementById('errorDisplay');
+            
+            let convertedCode = '';
             
             const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
             tooltipTriggerList.map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
@@ -120,14 +103,27 @@
             codeInput.addEventListener('input', validateInput);
             validateInput(); 
 
-            const setDarkMode = (isDark) => {
-                document.documentElement.setAttribute('data-bs-theme', isDark ? 'dark' : 'light');
-                localStorage.setItem('darkMode', isDark);
+            const createCopyButton = () => {
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'copy-button';
+                copyBtn.innerHTML = '<i class="bi bi-clipboard me-1"></i>Copiar Código';
+                copyBtn.addEventListener('click', async () => {
+                    try {
+                        await navigator.clipboard.writeText(convertedCode);
+                        copyBtn.classList.add('copied');
+                        copyBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Copiado!';
+                        setTimeout(() => {
+                            copyBtn.classList.remove('copied');
+                            copyBtn.innerHTML = '<i class="bi bi-clipboard me-1"></i>Copiar Código';
+                        }, 2000);
+                    } catch (err) {
+                        console.error('Erro ao copiar:', err);
+                    }
+                });
+                return copyBtn;
             };
-            const savedMode = localStorage.getItem('darkMode') === 'true';
-            darkModeSwitch.checked = savedMode;
-            setDarkMode(savedMode);
-            darkModeSwitch.addEventListener('change', () => setDarkMode(darkModeSwitch.checked));
+            
+            
 
             convertBtn.addEventListener('click', () => {
                 const originalButtonHTML = convertBtn.innerHTML;
@@ -154,11 +150,16 @@
                 })
                 .then(data => {
                     if (data.converted_code) {
+                        convertedCode = data.converted_code;
                         const escapedCode = data.converted_code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
                         
                         outputContainer.innerHTML = `
                             <pre class="line-numbers h-100"><code class="language-java">${escapedCode}</code></pre>
                         `;
+                        
+                        const copyBtn = createCopyButton();
+                        outputContainer.appendChild(copyBtn);
+                        
                         Prism.highlightAll();
                     }
                 })

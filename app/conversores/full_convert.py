@@ -1,323 +1,300 @@
 import re
-import javalang
-from flask import Blueprint, jsonify, render_template, request
+from typing import Dict, List, Tuple, Optional
+from flask import Blueprint, render_template, request, jsonify
 
-full_convert_bp = Blueprint('full_convert', __name__, template_folder='../templates')
+full_convert_bp = Blueprint('full_convert', __name__)
 
+@full_convert_bp.route('/')
+def index():
+    return render_template('full_converter.html')
 
-class ModelPartData:
-    def __init__(self, name):
-        self.name = name
-        self.texture_offset = (0, 0)
-        self.add_box = None
-        self.rotation_point = (0.0, 0.0, 0.0)
-        self.initial_rotation = (0.0, 0.0, 0.0)
-        self.mirror = False
+@full_convert_bp.route('/convert', methods=['POST'])
+def convert():
+    try:
+        # Obter código de entrada
+        code_input = request.form.get('code_input', '').strip()
         
-    def __repr__(self):
-        return f"Part(name={self.name}, offset={self.texture_offset}, box={self.add_box}, pivot={self.rotation_point}, rot={self.initial_rotation}, mirror={self.mirror})"
+        if not code_input:
+            return jsonify({'error': 'Código de entrada não pode estar vazio'}), 400
+        
+        # Converter modelo
+        converted_code = convert_model_code(code_input)
+        
+        return jsonify({
+            'converted_code': converted_code,
+            'success': True
+        })
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': f'Erro interno na conversão: {str(e)}'}), 500
 
 
-class ModelExtractor:
-    def __init__(self, java_code):
-        self.code = java_code
-        self.tree = None
-        self.class_name = "ConvertedModel"
-        self.texture_width = 64
-        self.texture_height = 64
-        self.parts = {}
-        self.animation_logic = []
+class ModelConverter:
 
-    def _get_numeric_value(self, node):
-        """Interpreta um nó da AST e retorna seu valor numérico, lidando com negativos."""
-        if isinstance(node, javalang.tree.Literal):
-            value_str = str(node.value).replace('F', '').replace('f', '').replace('D','').replace('d','')
-            return float(value_str)
-        if isinstance(node, javalang.tree.UnaryOperation) and node.operator == '-':
-            return -1 * self._get_numeric_value(node.operand)
-        return 0.0
+    def __init__(self):
+        self.texture_width = 256
+        self.texture_height = 128
+        self.parts_data = {}
+        self.animation_methods = []
+        self.entity_name = ""
 
-    def parse(self):
+    def convert_model(self, java_code: str) -> str:
+        """Converte um modelo 1.7.10 para 1.21.1"""
         try:
-            self.tree = javalang.parse.parse(self.code)
-            if self.tree.types and isinstance(self.tree.types[0], javalang.tree.ClassDeclaration):
-                self.class_name = self.tree.types[0].name
-            else:
-                class_declarations = list(self.tree.filter(javalang.tree.ClassDeclaration))
-                if not class_declarations: 
-                    raise ValueError("Nenhuma classe Java encontrada.")
-                self.class_name = class_declarations[0][1].name
-            return True, None
+            # Extrair informações básicas
+            self._extract_basic_info(java_code)
+
+            # Mapear todas as partes do modelo
+            self._extract_model_parts(java_code)
+
+            # Extrair métodos de animação
+            self._extract_animation_methods(java_code)
+
+            # Gerar código 1.21.1
+            return self._generate_modern_model()
+
         except Exception as e:
-            return False, f"Erro na análise do código: {e}"
+            raise Exception(f"Erro na conversão: {str(e)}")
 
-    def extract_data(self):
-        if not self.tree: 
-            return False, "Código não analisado."
-        
-        constructors = list(self.tree.filter(javalang.tree.ConstructorDeclaration))
-        if constructors:
-            self._extract_from_constructor(constructors[0][1].body)
-        
-        render_methods = [m for m in self.tree.filter(javalang.tree.MethodDeclaration) if m[1].name == 'render']
-        if render_methods:
-            self._extract_from_render(render_methods[0][1].body)
-            
-        return True, "Extração concluída."
+    def _extract_basic_info(self, java_code: str):
+        """Extrai informações básicas do modelo"""
+        # Nome da classe
+        class_match = re.search(r'public class (\w+) extends ModelBase',
+                                java_code)
+        if class_match:
+            self.entity_name = class_match.group(1).replace('Model', '')
 
-    def _extract_from_constructor(self, body):
-        """Extrai dados das partes do modelo a partir do construtor."""
-        lines = self.code.splitlines()
-        
-        for stmt in body:
-            if not hasattr(stmt, 'position') or stmt.position is None: 
-                continue
-                
-            if stmt.position.line <= len(lines):
-                line = lines[stmt.position.line - 1].strip()
-                
-                texture_match = re.search(r"(textureWidth|textureHeight)\s*=\s*(\d+)", line)
-                if texture_match:
-                    key, value = texture_match.groups()
-                    if key == "textureWidth": 
-                        self.texture_width = int(value)
-                    elif key == "textureHeight": 
-                        self.texture_height = int(value)
-                    continue
-                
-                init_match = re.search(r"\((?:this\.)?(\w+)\s*=\s*new\s+ModelRenderer\(\s*(?:\([^)]*\))?\s*this\s*,\s*(\d+)\s*,\s*(\d+)\s*\)", line)
-                if init_match:
-                    part_name, u, v = init_match.groups()
-                    if part_name not in self.parts:
-                        self.parts[part_name] = ModelPartData(part_name)
-                    self.parts[part_name].texture_offset = (int(u), int(v))
-                    continue
-                
-                self._extract_part_properties(line)
-                
-    def _extract_part_properties(self, line):
-        """Extrai propriedades específicas de cada parte."""
-        part_match = re.match(r"(?:this\.)?(\w+)\.", line)
-        if not part_match:
-            return
-            
-        part_name = part_match.group(1)
-        if part_name not in self.parts:
-            self.parts[part_name] = ModelPartData(part_name)
-        
-        part = self.parts[part_name]
-        
-        box_match = re.search(r"\.addBox\s*\(\s*([^)]+)\)", line)
-        if box_match:
-            args_str = box_match.group(1)
-            try:
-                args = [float(arg.strip().replace('f', '').replace('F', '')) for arg in args_str.split(',')]
-                if len(args) >= 6:
-                    part.add_box = tuple(args[:6])  # x, y, z, width, height, depth
-            except (ValueError, IndexError):
-                pass
-                
-        rot_match = re.search(r"\.setRotationPoint\s*\(\s*([^)]+)\)", line)
-        if rot_match:
-            args_str = rot_match.group(1)
-            try:
-                args = [float(arg.strip().replace('f', '').replace('F', '')) for arg in args_str.split(',')]
-                if len(args) >= 3:
-                    part.rotation_point = tuple(args[:3])
-            except (ValueError, IndexError):
-                pass
-                
-        mirror_match = re.search(r"\.mirror\s*=\s*(true|false)", line)
-        if mirror_match:
-            part.mirror = (mirror_match.group(1) == 'true')
-            
-        setrot_match = re.search(r"setRotation\s*\(\s*" + re.escape(part_name) + r"\s*,\s*([^)]+)\)", line)
-        if setrot_match:
-            args_str = setrot_match.group(1)
-            try:
-                args = [float(arg.strip().replace('f', '').replace('F', '')) for arg in args_str.split(',')]
-                if len(args) >= 3:
-                    part.initial_rotation = tuple(args[:3])
-            except (ValueError, IndexError):
-                pass
+        # Dimensões da textura
+        texture_width_match = re.search(r'this\.textureWidth = (\d+)',
+                                        java_code)
+        texture_height_match = re.search(r'this\.textureHeight = (\d+)',
+                                         java_code)
 
-    def _extract_from_render(self, body):
-        """Extrai lógica de animação do método render."""
-        lines = self.code.splitlines()
-        for stmt in body:
-            if hasattr(stmt, 'position') and stmt.position and stmt.position.line <= len(lines):
-                line_content = lines[stmt.position.line - 1].strip()
-                # Filtrar apenas linhas relevantes de animação
-                if (line_content and 
-                    "super.render" not in line_content and 
-                    "setRotationAngles" not in line_content and
-                    ".render(" not in line_content and
-                    not line_content.startswith("//") and
-                    line_content != "{" and line_content != "}"):
-                    self.animation_logic.append(line_content)
+        if texture_width_match:
+            self.texture_width = int(texture_width_match.group(1))
+        if texture_height_match:
+            self.texture_height = int(texture_height_match.group(1))
 
+    def _extract_model_parts(self, java_code: str):
+        """Extrai todas as partes do modelo e suas configurações"""
+        # Encontrar todas as declarações de ModelRenderer
+        part_declarations = re.findall(r'ModelRenderer (\w+);', java_code)
 
-class CodeGenerator:
-    def __init__(self, data):
-        self.data = data
-        self.class_name = data['class_name']
-        self.parts = data['parts']
+        for part_name in part_declarations:
+            # Encontrar a configuração desta parte
+            part_config = self._extract_part_config(java_code, part_name)
+            if part_config:
+                self.parts_data[part_name] = part_config
 
-    def generate(self):
-        """Gera o código completo do modelo 1.21.1."""
-        imports = self._generate_imports()
-        class_decl = f"public class {self.class_name}<T extends Entity> extends EntityModel<T>"
-        fields = self._generate_fields()
-        constructor = self._generate_constructor()
-        layer_def = self._generate_create_body_layer()
-        setup_anim = self._generate_setup_anim()
-        render_buffer = self._generate_render_to_buffer()
-        root_method = self._generate_root_method()
-        
-        return f"""{imports}
+    def _extract_part_config(self, java_code: str,
+                             part_name: str) -> Optional[Dict]:
+        """Extrai a configuração de uma parte específica"""
+        # Padrão para encontrar a configuração completa da parte
+        pattern = rf'\(this\.{part_name} = new ModelRenderer.*?\)\)\.addBox\((.*?)\);.*?{part_name}\.setRotationPoint\((.*?)\);.*?this\.setRotation\(this\.{part_name}, (.*?)\);'
 
-{class_decl} {{
-{fields}
+        match = re.search(pattern, java_code, re.DOTALL)
+        if not match:
+            return None
 
-{constructor}
+        # Extrair informações da addBox
+        addbox_params = [p.strip() for p in match.group(1).split(',')]
+        if len(addbox_params) >= 6:
+            x_offset = float(addbox_params[0].replace('f', ''))
+            y_offset = float(addbox_params[1].replace('f', ''))
+            z_offset = float(addbox_params[2].replace('f', ''))
+            width = int(addbox_params[3])
+            height = int(addbox_params[4])
+            depth = int(addbox_params[5])
+        else:
+            return None
 
-{layer_def}
+        # Extrair posição
+        position_params = [p.strip() for p in match.group(2).split(',')]
+        if len(position_params) >= 3:
+            pos_x = float(position_params[0].replace('f', ''))
+            pos_y = float(position_params[1].replace('f', ''))
+            pos_z = float(position_params[2].replace('f', ''))
+        else:
+            pos_x = pos_y = pos_z = 0.0
 
-{setup_anim}
+        # Extrair rotação
+        rotation_params = [p.strip() for p in match.group(3).split(',')]
+        if len(rotation_params) >= 3:
+            rot_x = float(rotation_params[0].replace('f', ''))
+            rot_y = float(rotation_params[1].replace('f', ''))
+            rot_z = float(rotation_params[2].replace('f', ''))
+        else:
+            rot_x = rot_y = rot_z = 0.0
 
-{render_buffer}
+        # Extrair coordenadas da textura
+        texture_match = re.search(rf'new ModelRenderer.*?this, (\d+), (\d+)\)',
+                                  java_code)
+        tex_u = tex_v = 0
+        if texture_match:
+            tex_u = int(texture_match.group(1))
+            tex_v = int(texture_match.group(2))
 
-{root_method}
-}}"""
+        return {
+            'addBox': {
+                'x': x_offset,
+                'y': y_offset,
+                'z': z_offset,
+                'width': width,
+                'height': height,
+                'depth': depth
+            },
+            'position': {
+                'x': pos_x,
+                'y': pos_y,
+                'z': pos_z
+            },
+            'rotation': {
+                'x': rot_x,
+                'y': rot_y,
+                'z': rot_z
+            },
+            'texture': {
+                'u': tex_u,
+                'v': tex_v
+            }
+        }
 
-    def _generate_imports(self):
-        return """import com.mojang.blaze3d.vertex.PoseStack;
+    def _extract_animation_methods(self, java_code: str):
+        """Extrai métodos de animação personalizados"""
+        # Encontrar métodos como doLeftLeg, doRightLeg, doTail, etc.
+        method_pattern = r'private void (do\w+)\((.*?)\) \{(.*?)\}'
+        methods = re.findall(method_pattern, java_code, re.DOTALL)
+
+        for method_name, params, body in methods:
+            self.animation_methods.append({
+                'name': method_name,
+                'params': params,
+                'body': body.strip()
+            })
+
+    def _generate_modern_model(self) -> str:
+        """Gera o código do modelo modernizado para 1.21.1"""
+        class_name = f"{self.entity_name}Model"
+
+        # Cabeçalho
+        code = f'''package mglucas0123.entities.models;
+
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import net.minecraft.client.model.EntityModel;
+import net.minecraft.client.model.HierarchicalModel;
+import net.minecraft.client.model.geom.ModelLayerLocation;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartPose;
 import net.minecraft.client.model.geom.builders.*;
 import net.minecraft.util.Mth;
-import net.minecraft.world.entity.Entity;"""
+import net.minecraft.resources.ResourceLocation;
+import mglucas0123.entities.{self.entity_name}Entity;
 
-    def _generate_fields(self):
-        """Gera campos do modelo seguindo a hierarquia 1.21.1."""
-        field_lines = ["    private final ModelPart root;"]
-        part_names = sorted(self.parts.keys())
-        field_lines.extend([f"    private final ModelPart {name};" for name in part_names])
-        return "\n".join(field_lines)
+public class {class_name} extends HierarchicalModel<{self.entity_name}Entity> {{
+    private final ModelPart root;
+'''
 
-    def _generate_constructor(self):
-        """Gera construtor seguindo padrão 1.21.1."""
-        part_names = sorted(self.parts.keys())
-        constructor_lines = ["        this.root = root;"]
-        constructor_lines.extend([f"        this.{name} = root.getChild(\"{name}\");" for name in part_names])
-        body = "\n".join(constructor_lines)
-        
-        return f"""    public {self.class_name}(ModelPart root) {{
-{body}
-    }}"""
+        # Declarar todas as partes
+        for part_name in self.parts_data.keys():
+            code += f"    private final ModelPart {part_name};\n"
 
-    def _generate_create_body_layer(self):
-        """Gera o método createBodyLayer com todas as partes definidas corretamente."""
-        width, height = self.data['texture_size']
-        part_def_lines = []
-        part_names = sorted(self.parts.keys())
+        # Construtor
+        code += f'''
+    public {class_name}(ModelPart root) {{
+        this.root = root;
+'''
 
-        for name in part_names:
-            part_data = self.parts[name]
-            u, v = part_data['texture_offset']
-            
-            # Construir CubeListBuilder
-            cubebuilder = f"CubeListBuilder.create().texOffs({u}, {v})"
-            
-            if part_data['mirror']:
-                cubebuilder += ".mirror()"
-            
-            # Adicionar geometria se disponível
-            if part_data['add_box'] and len(part_data['add_box']) >= 6:
-                x, y, z, w, h, d = part_data['add_box']
-                cubebuilder += f".addBox({x}F, {y}F, {z}F, {w}F, {h}F, {d}F)"
-            
-            # Definir posição e rotação
-            px, py, pz = part_data['rotation_point']
-            rx, ry, rz = part_data['initial_rotation']
-            
-            partpose = f"PartPose.offsetAndRotation({px}F, {py}F, {pz}F, {rx}F, {ry}F, {rz}F)"
-            
-            part_def_lines.append(f'        partdefinition.addOrReplaceChild("{name}", {cubebuilder}, {partpose});')
+        for part_name in self.parts_data.keys():
+            code += f'        this.{part_name} = root.getChild("{part_name}");\n'
 
-        body = "\n".join(part_def_lines)
-        
-        return f"""    public static LayerDefinition createBodyLayer() {{
+        code += "    }\n\n"
+
+        # Método createBodyLayer
+        code += f'''    public static LayerDefinition createBodyLayer() {{
         MeshDefinition meshdefinition = new MeshDefinition();
         PartDefinition partdefinition = meshdefinition.getRoot();
 
-{body}
+'''
 
-        return LayerDefinition.create(meshdefinition, {width}, {height});
-    }}"""
+        # Definir todas as partes
+        for part_name, config in self.parts_data.items():
+            addbox = config['addBox']
+            pos = config['position']
+            rot = config['rotation']
+            tex = config['texture']
 
-    def _generate_setup_anim(self):
-        """Gera setupAnim vazio conforme solicitado."""
-        return """    @Override
-    public void setupAnim(T entity, float limbSwing, float limbSwingAmount, float ageInTicks, float netHeadYaw, float headPitch) {
-        // Animação removida conforme solicitado - modelo apenas estrutural
-    }"""
-    
-    def _generate_render_to_buffer(self):
-        """Gera renderToBuffer seguindo padrão 1.21.1."""
-        return """    @Override
-    public void renderToBuffer(PoseStack poseStack, VertexConsumer vertexConsumer, int packedLight, int packedOverlay, int color) {
-        root.render(poseStack, vertexConsumer, packedLight, packedOverlay, color);
-    }"""
-    
-    def _generate_root_method(self):
-        """Gera o método root() necessário para EntityModel."""
-        return """    @Override
+            code += f'''        partdefinition.addOrReplaceChild("{part_name}",
+            CubeListBuilder.create()
+                .texOffs({tex['u']}, {tex['v']})
+                .addBox({addbox['x']}f, {addbox['y']}f, {addbox['z']}f, 
+                       {addbox['width']}, {addbox['height']}, {addbox['depth']}),
+            PartPose.offsetAndRotation({pos['x']}f, {pos['y']}f, {pos['z']}f,
+                                     {rot['x']}f, {rot['y']}f, {rot['z']}f));
+
+'''
+
+        code += f'''        return LayerDefinition.create(meshdefinition, {self.texture_width}, {self.texture_height});
+    }}
+
+'''
+
+        # Método root
+        code += '''    @Override
     public ModelPart root() {
         return this.root;
-    }"""
+    }
 
-@full_convert_bp.route('/')
-def index():
-    """Renderiza a página inicial do conversor."""
-    return render_template('full_converter.html', original_code='', converted_code=None, error=None)
+'''
 
-@full_convert_bp.route('/convert', methods=['POST'])
-def convert_code():
-    """Recebe o código via AJAX, executa a conversão e retorna o resultado em JSON."""
-    try:
-        old_code = request.form.get('code_input', '')
-        if not old_code:
-            return jsonify({'error': 'Nenhum código foi fornecido.'}), 400
+        # Método setupAnim (vazio conforme solicitado)
+        code += f'''    @Override
+    public void setupAnim({self.entity_name}Entity entity, float limbSwing, float limbSwingAmount, 
+                         float ageInTicks, float netHeadYaw, float headPitch) {{
+        // Animações serão implementadas posteriormente
+        // TODO: Transferir lógica de animação dos métodos do modelo original
+'''
 
-        extractor = ModelExtractor(old_code)
-        
-        parse_success, message = extractor.parse()
-        if not parse_success:
-            return jsonify({'error': message}), 400
-            
-        extract_success, message = extractor.extract_data()
-        if not extract_success:
-            return jsonify({'error': message}), 400
+        # Adicionar comentários sobre os métodos de animação encontrados
+        if self.animation_methods:
+            code += "\n        // Métodos de animação detectados no modelo original:\n"
+            for method in self.animation_methods:
+                code += f"        // - {method['name']}({method['params']})\n"
 
-        if not extractor.parts:
-            return jsonify({'error': 'Nenhuma parte do modelo foi encontrada. Verifique se o código contém definições de ModelRenderer.'}), 400
+        code += "    }\n"
 
-        extracted_data_dict = {
-            "class_name": extractor.class_name,
-            "texture_size": (extractor.texture_width, extractor.texture_height),
-            "parts": {name: part.__dict__ for name, part in extractor.parts.items()},
-            "animation_logic": extractor.animation_logic
-        }
+        # Adicionar métodos de animação como comentários para referência
+        if self.animation_methods:
+            code += "\n    /* MÉTODOS DE ANIMAÇÃO ORIGINAIS PARA REFERÊNCIA:\n"
+            for method in self.animation_methods:
+                code += f"\n    // Método: {method['name']}\n"
+                code += f"    // Parâmetros: {method['params']}\n"
+                code += f"    // Corpo original:\n"
+                # Comentar cada linha do corpo
+                for line in method['body'].split('\n'):
+                    if line.strip():
+                        code += f"    // {line}\n"
+                code += "\n"
+            code += "    */\n"
 
-        code_generator = CodeGenerator(extracted_data_dict)
-        new_code = code_generator.generate()
-        
-        return jsonify({'converted_code': new_code})
+        code += "}"
 
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': f'Erro interno no servidor: {str(e)}'}), 500
+        return code
+
+
+def convert_model_code(input_code: str) -> str:
+    """Função principal para converter código de modelo"""
+    if not input_code or not input_code.strip():
+        raise ValueError("Código de entrada não pode estar vazio")
+
+    # Verificar se é um modelo 1.7.10 válido
+    if "extends ModelBase" not in input_code:
+        raise ValueError(
+            "O código fornecido não parece ser um modelo ModelBase válido")
+
+    if "ModelRenderer" not in input_code:
+        raise ValueError("O código não contém declarações ModelRenderer")
+
+    converter = ModelConverter()
+    return converter.convert_model(input_code)
