@@ -1,6 +1,6 @@
 import os
 
-from flask import Flask, app, render_template
+from flask import Flask, app, render_template, redirect, url_for
 from werkzeug.security import generate_password_hash
 from dotenv import load_dotenv
 
@@ -19,4 +19,8 @@ def create_app():
     return app
 
 def registry_routes(app):
-    app.register_blueprint(full_convert_bp)
+    app.register_blueprint(full_convert_bp, url_prefix='/full_convert')
+    
+    @app.route('/')
+    def home():
+        return redirect(url_for('full_convert.index'))

@@ -107,17 +107,34 @@
                 const copyBtn = document.createElement('button');
                 copyBtn.className = 'copy-button';
                 copyBtn.innerHTML = '<i class="bi bi-clipboard me-1"></i>Copiar Código';
-                copyBtn.addEventListener('click', async () => {
+                copyBtn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
                     try {
                         await navigator.clipboard.writeText(convertedCode);
                         copyBtn.classList.add('copied');
-                        copyBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Copiado!';
+                        copyBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>';
                         setTimeout(() => {
                             copyBtn.classList.remove('copied');
                             copyBtn.innerHTML = '<i class="bi bi-clipboard me-1"></i>Copiar Código';
                         }, 2000);
                     } catch (err) {
                         console.error('Erro ao copiar:', err);
+                        // Fallback para seleção manual se clipboard API falhar
+                        const textArea = document.createElement('textarea');
+                        textArea.value = convertedCode;
+                        document.body.appendChild(textArea);
+                        textArea.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(textArea);
+                        
+                        copyBtn.classList.add('copied');
+                        copyBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>';
+                        setTimeout(() => {
+                            copyBtn.classList.remove('copied');
+                            copyBtn.innerHTML = '<i class="bi bi-clipboard me-1"></i>Copiar Código';
+                        }, 2000);
                     }
                 });
                 return copyBtn;
@@ -133,12 +150,14 @@
                 convertBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Convertendo...';
                 errorDisplay.style.display = 'none';
 
-                const formData = new FormData();
-                formData.append('code_input', codeToConvert);
-
-                fetch('/convert', {
+                fetch('/full_convert/convert', {
                     method: 'POST',
-                    body: formData
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        code_input: codeToConvert
+                    })
                 })
                 .then(response => {
                     if (!response.ok) {
